@@ -34,7 +34,8 @@ const {
     GetObjectCommand,
     PutObjectCommand,
     ListObjectsCommand,
-    S3Client
+    S3Client,
+    DeleteObjectCommand
 } = require('@aws-sdk/client-s3')
 
 // File system module
@@ -42,7 +43,7 @@ const {
 
 // Interfacing with AWS S3
 const client = new S3Client({
-    bucketName: '2024-squares-backend',
+    bucketName: process.env.AWS_BUCKET,
     region: process.env.AWS_DEFAULT_REGION,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -101,16 +102,10 @@ app.get('/users', (req, res) => {
 // })
 
 
-// INDEX SQUARES
-app.get('/squares', (req, res) => {
-    connection.query(
-        // Get back max 20 squares 
-        'SELECT * FROM squares ORDER BY created_at LIMIT 20',
-        function (err, results) {
-            console.log(results)
-        }
-    )
-
+// READ SQUARES
+app.get('/squares', async (req, res) => {
+    const squares = await Square.findAll()
+    console.log(squares)
 })
 
 // POST SQUARES
@@ -124,7 +119,7 @@ app.post('/squares', upload.single('image'), async (req, res) => {
     //upload to s3
     const input = {
         Body: req.file.buffer, //filedata
-        Bucket: '2024-squares-backend',
+        Bucket: process.env.AWS_BUCKET,
         Key: s3ObjectKey, //filename
         Description: req.body.Description
     }
@@ -132,19 +127,62 @@ app.post('/squares', upload.single('image'), async (req, res) => {
     const command = new PutObjectCommand(input)
 
     try {
+        console.log("created")
         await client.send(command)
     } catch (err) {
-        console.log("Error: ", err)
+        console.log('Error: ', err)
     }
 
     //get object s3 url
     //insert new row in mySQL w s3 url
     Square.create({
+        keyName: s3ObjectKey,
         squares_description: req.body.Description,
         img_url: `https://2024-squares-backend.s3.ca-central-1.amazonaws.com/${s3ObjectKey}`
     })
 
 })
+
+// GET SINGLE SQUARE
+app.get('/squares/:id', async (req, res) => {
+    try{
+        const singleSquare = await Square.findByPk(req.params.id)
+    } catch(err){
+        res.send('Error: ', err)
+    }
+    console.log(singleSquare)
+    console.log(singleSquare.keyName)
+})
+
+
+// DELETE A SQUARE
+app.delete('/squares/:id', async (req, res)=> {
+    // find in mySQL
+    const singleSquare = await Square.findByPk(req.params.id)
+
+    // Delete from mySQL
+    Square.destroy({
+        where: {
+            id: req.params.id
+        }
+    })
+    
+    // Delete from S3
+    const command = new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET,
+        Key: singleSquare.keyName
+    })
+
+    try {
+        const deletedResponse = await client.send(command)
+        console.log('Success')
+        res.send('Success')
+    } catch (err) {
+        res.send('Error: ', err)
+    }
+})
+
+// UPDATE SQUARE
 
 
 app.listen(port, () => {

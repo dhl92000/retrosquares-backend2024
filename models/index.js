@@ -32,6 +32,7 @@ const Square = sequelize.define('Square', {
         autoIncrement: true,
         primaryKey: true
     },
+    keyName: DataTypes.STRING,
     squares_description: DataTypes.STRING,
     img_url: DataTypes.STRING,
     hashtags: {
@@ -44,7 +45,7 @@ const Square = sequelize.define('Square', {
 User.hasMany(Square)
 Square.belongsTo(User)
 
-// Function to sync/overwrite existing db
+//Function to sync/overwrite existing db
 // const modelSync = async () => {
 //     await sequelize.sync({ force: true });
 //  }
