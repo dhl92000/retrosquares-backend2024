@@ -1,7 +1,7 @@
 const express = require('express')
 const app = express()
 require('dotenv').config()
-//const bodyParser = require('body-parser')
+const bodyParser = require('body-parser')
 const uuid = require('uuid')
 const multer = require('multer')
 const Router = require('router')
@@ -25,8 +25,8 @@ const port = 3000 || process.env.PORT
 
 // ---------middleware------------
 const upload = multer()
-// app.use(bodyParser.json())
-// app.use(bodyParser.raw({type: "*/*"}))
+app.use(bodyParser.json())
+app.use(bodyParser.urlencoded({ extended: true }))
 
 
 // Import client + commands from AWS-SDK
@@ -62,7 +62,7 @@ const connection = mysql.createConnection({
 
 
 // ----------models--------------
-const { User, Square } = require ('./models/index')
+const { User, Square } = require('./models/index')
 
 
 
@@ -113,7 +113,7 @@ app.post('/squares', upload.single('image'), async (req, res) => {
     // req.file is the name of my file, req.body contains text fields
     // console.log('reqimg: ', req.file)
     // console.log('reqbody: ', req.body)
-    
+
     s3ObjectKey = uuid.v4()
 
     //upload to s3
@@ -145,9 +145,9 @@ app.post('/squares', upload.single('image'), async (req, res) => {
 
 // GET SINGLE SQUARE
 app.get('/squares/:id', async (req, res) => {
-    try{
+    try {
         const singleSquare = await Square.findByPk(req.params.id)
-    } catch(err){
+    } catch (err) {
         res.send('Error: ', err)
     }
     console.log(singleSquare)
@@ -156,7 +156,7 @@ app.get('/squares/:id', async (req, res) => {
 
 
 // DELETE A SQUARE
-app.delete('/squares/:id', async (req, res)=> {
+app.delete('/squares/:id', async (req, res) => {
     // find in mySQL
     const singleSquare = await Square.findByPk(req.params.id)
 
@@ -166,7 +166,7 @@ app.delete('/squares/:id', async (req, res)=> {
             id: req.params.id
         }
     })
-    
+
     // Delete from S3
     const command = new DeleteObjectCommand({
         Bucket: process.env.AWS_BUCKET,
@@ -183,7 +183,23 @@ app.delete('/squares/:id', async (req, res)=> {
 })
 
 // UPDATE SQUARE
+app.put('/squares/:id', async (req, res) => {
+    // find in mySQL
+    const squareToUpdate = await Square.findByPk(req.params.id)
+    // get description from request body
+    const bodyToInsert = await req.body.Description
 
+    // update AND save to mySQL
+    try {
+        const updatedResponse = await squareToUpdate.update({
+            squares_description: bodyToInsert
+        })
+       updatedResponse.save()
+       res.send('Success')
+    } catch (err) {
+        res.send(err)
+    }
+})
 
 app.listen(port, () => {
     console.log(`Listening on port ${port}`)
