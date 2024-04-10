@@ -52,10 +52,10 @@ const client = new S3Client({
 // Connection to mySQL database
 const mysql = require('mysql2')
 const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
     password: process.env.MYSQL_PASSWORD,
-    database: 'retrosq_squares'
+    database: process.env.MYSQL_DATABASE,
+    host: process.env.MYSQL_HOST,
+    user: process.env.MYSQL_USER
 })
 
 
@@ -72,16 +72,20 @@ const { User, Square } = require('./models/index')
 
 // ---------endpoints------------ 
 // INDEX PAGE USERS 
-app.get('/users', (req, res) => {
-    // gets back all 'squares'
-    connection.query(
-        'SELECT * FROM users',
-        function (err, results) {
-            console.log(results)
-            // AWS SDK
-            // loop through objects and return ones w matching img_id
-        }
-    )
+app.get('/users', async (req, res) => {
+    // gets back all 'users'
+    try {
+        console.log('getting all users')
+        connection.query(
+            'SELECT * FROM users',
+            function (err, results) {
+                res.json(results)
+            }
+        )
+    } catch (err) {
+        res.status(400).json(err)
+    }
+
 })
 
 // LIST OBJECTS IN A BUCKET EXAMPLE
@@ -104,16 +108,22 @@ app.get('/users', (req, res) => {
 
 // READ SQUARES
 app.get('/squares', async (req, res) => {
-    const squares = await Square.findAll()
-    console.log(squares)
+    try {
+        console.log('getting squares')
+        res.json(await Square.findAll())
+    } catch (err) {
+        res.status(400).json(err)
+    }
 })
 
 // POST SQUARES
+// Multer adds a body object and file object to request object
+// req.body object contains text fields of form
+// req.file object contains the files == 'image' file
 app.post('/squares', upload.single('image'), async (req, res) => {
-    // req.file is the name of my file, req.body contains text fields
-    // console.log('reqimg: ', req.file)
-    // console.log('reqbody: ', req.body)
-
+    console.log('reqimg: ', req.file)
+    console.log('reqbody: ', req.body)
+    // create random key name for s3 storage 
     s3ObjectKey = uuid.v4()
 
     //upload to s3
@@ -127,31 +137,34 @@ app.post('/squares', upload.single('image'), async (req, res) => {
     const command = new PutObjectCommand(input)
 
     try {
-        console.log("created")
         await client.send(command)
-    } catch (err) {
-        console.log('Error: ', err)
-    }
+        let resObject = await Square.create({
+            keyName: s3ObjectKey,
+            squares_description: req.body.Description,
+            img_url: `https://2024-squares-backend.s3.ca-central-1.amazonaws.com/${s3ObjectKey}`
+        })
 
-    //get object s3 url
-    //insert new row in mySQL w s3 url
-    Square.create({
-        keyName: s3ObjectKey,
-        squares_description: req.body.Description,
-        img_url: `https://2024-squares-backend.s3.ca-central-1.amazonaws.com/${s3ObjectKey}`
-    })
+        console.log(resObject)
+        //insert new row in mySQL w s3 url
+        res.json(resObject.toJSON())
+
+    } catch (err) {
+        res.status(400).json(err)
+        console.log(err)
+    }
 
 })
 
 // GET SINGLE SQUARE
 app.get('/squares/:id', async (req, res) => {
     try {
-        const singleSquare = await Square.findByPk(req.params.id)
+        // const singleSquare = await Square.findByPk(req.params.id)
+        res.json(await Square.findByPk(req.params.id))
     } catch (err) {
-        res.send('Error: ', err)
+        res.status(400).json(err)
     }
-    console.log(singleSquare)
-    console.log(singleSquare.keyName)
+    // console.log(singleSquare)
+    // console.log(singleSquare.keyName)
 })
 
 
@@ -174,11 +187,10 @@ app.delete('/squares/:id', async (req, res) => {
     })
 
     try {
-        const deletedResponse = await client.send(command)
-        console.log('Success')
-        res.send('Success')
+        console.log('Deleted')
+        res.json(await client.send(command))
     } catch (err) {
-        res.send('Error: ', err)
+        res.status(400).json(err)
     }
 })
 
@@ -187,17 +199,20 @@ app.put('/squares/:id', async (req, res) => {
     // find in mySQL
     const squareToUpdate = await Square.findByPk(req.params.id)
     // get description from request body
-    const bodyToInsert = await req.body.Description
+    const bodyToInsert = req.body.squares_description
 
     // update AND save to mySQL
     try {
         const updatedResponse = await squareToUpdate.update({
             squares_description: bodyToInsert
         })
-       updatedResponse.save()
-       res.send('Success')
+
+        updatedResponse.save()
+
+        res.json(updatedResponse.toJSON())
+
     } catch (err) {
-        res.send(err)
+        res.status(400).json(err)
     }
 })
 

@@ -1,6 +1,9 @@
 const { Sequelize, DataTypes } = require('sequelize')
+require('dotenv').config()
+
 // Connect to db with Sequelize instance
-const sequelize = new Sequelize('retrosq_squares', 'root', process.env.MYSQL_PASSWORD, {
+const sequelize = new Sequelize(process.env.MYSQL_DATABASE, process.env.MYSQL_USER, process.env.MYSQL_PASSWORD, {
+    host: process.env.MYSQL_HOST,
     dialect: 'mysql'
 })
 
@@ -45,10 +48,12 @@ const Square = sequelize.define('Square', {
 User.hasMany(Square)
 Square.belongsTo(User)
 
-//Function to sync/overwrite existing db
-// const modelSync = async () => {
-//     await sequelize.sync({ force: true });
-//  }
+
+// Function to sync/overwrite existing db
+const modelSync = async () => {
+    await sequelize.sync({ force: true });
+    console.log("models synced!")
+ }
 
 // modelSync()
 
