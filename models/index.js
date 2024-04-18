@@ -37,17 +37,25 @@ const Square = sequelize.define('Square', {
     },
     keyName: DataTypes.STRING,
     squares_description: DataTypes.STRING,
-    img_url: DataTypes.STRING,
-    hashtags: {
-        type: DataTypes.STRING
-    }
+    img_url: DataTypes.STRING
 }
 )
+
+const Hashtag = sequelize.define('Hashtag', {
+    id:{
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true
+    },
+    hashtag: DataTypes.STRING
+
+})
 
 // ASSOCIATIONS
 User.hasMany(Square)
 Square.belongsTo(User)
-
+Square.belongsToMany(Hashtag, {through: 'SquareHashtag'})
+Hashtag.belongsToMany(Square, { through: 'SquareHashtag'})
 
 // Function to sync/overwrite existing db
 const modelSync = async () => {
@@ -55,8 +63,8 @@ const modelSync = async () => {
     console.log("models synced!")
  }
 
-// modelSync()
+//modelSync()
 
 
-module.exports = { User, Square }
+module.exports = { User, Square, Hashtag }
 

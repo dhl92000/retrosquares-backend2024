@@ -24,10 +24,12 @@ const sequelize = new Sequelize('retrosq_squares', 'root', process.env.MYSQL_PAS
 const port = 3000 || process.env.PORT
 
 // ---------middleware------------
+const cors = require('cors')
+const morgan = require('morgan')
 const upload = multer()
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
-
+app.use(cors())
 
 // Import client + commands from AWS-SDK
 const {
@@ -60,14 +62,8 @@ const connection = mysql.createConnection({
 
 
 
-
 // ----------models--------------
-const { User, Square } = require('./models/index')
-
-
-
-
-
+const { User, Square, Hashtag } = require('./models/index')
 
 
 // ---------endpoints------------ 
@@ -116,6 +112,16 @@ app.get('/squares', async (req, res) => {
     }
 })
 
+// READ HASHTAGS
+app.get('/hashtags', async (req, res) => {
+    try {
+        console.log('getting hashtags')
+        res.json(await Hashtag.findAll())
+    } catch (err) {
+        res.status(400).json(err)
+    }
+})
+
 // POST SQUARES
 // Multer adds a body object and file object to request object
 // req.body object contains text fields of form
@@ -123,31 +129,46 @@ app.get('/squares', async (req, res) => {
 app.post('/squares', upload.single('image'), async (req, res) => {
     console.log('reqimg: ', req.file)
     console.log('reqbody: ', req.body)
+
+    function parseHashtags(str) {
+        let splitDescription = str.split(' ')
+        return splitDescription.filter((word) => word[0] === '#')
+    }
+
     // create random key name for s3 storage 
     s3ObjectKey = uuid.v4()
 
-    //upload to s3
+    // upload image to s3
     const input = {
         Body: req.file.buffer, //filedata
         Bucket: process.env.AWS_BUCKET,
         Key: s3ObjectKey, //filename
         Description: req.body.Description
     }
-    // client.send uploads my input into s3 using PutObjectCommand
+    // client.send uploads input into s3
     const command = new PutObjectCommand(input)
 
     try {
         await client.send(command)
+
+        // create a new MySQL row in the Square table
         let resObject = await Square.create({
             keyName: s3ObjectKey,
             squares_description: req.body.Description,
             img_url: `https://2024-squares-backend.s3.ca-central-1.amazonaws.com/${s3ObjectKey}`
         })
 
-        console.log(resObject)
-        //insert new row in mySQL w s3 url
-        res.json(resObject.toJSON())
+        // create new MySQL rows in Hashtags table
+        let hashtags = parseHashtags(req.body.Description)
 
+        for(let i = 0; i < hashtags.length; i++){
+            let [tag, created] = await Hashtag.findOrCreate({
+                where: { hashtag: hashtags[i] }
+            })
+            await resObject.addHashtag(tag)
+        }
+
+        res.json(resObject.toJSON())
     } catch (err) {
         res.status(400).json(err)
         console.log(err)
