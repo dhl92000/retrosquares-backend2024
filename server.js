@@ -112,11 +112,16 @@ app.get('/squares', async (req, res) => {
     }
 })
 
-// READ HASHTAGS
+// GET HASHTAGS
+// with search param
 app.get('/hashtags', async (req, res) => {
     try {
+        // find matching Hashtag and get HashtagId
+        // get all the Squares associated to HashtagId
+        // hashtag.getSquares({hashtag: hashtagId}) 
         console.log('getting hashtags')
-        res.json(await Hashtag.findAll())
+
+        //res.json(await Hashtag.findAll())
     } catch (err) {
         res.status(400).json(err)
     }
@@ -161,7 +166,7 @@ app.post('/squares', upload.single('image'), async (req, res) => {
         // create new MySQL rows in Hashtags table
         let hashtags = parseHashtags(req.body.Description)
 
-        for(let i = 0; i < hashtags.length; i++){
+        for (let i = 0; i < hashtags.length; i++) {
             let [tag, created] = await Hashtag.findOrCreate({
                 where: { hashtag: hashtags[i] }
             })
@@ -179,13 +184,10 @@ app.post('/squares', upload.single('image'), async (req, res) => {
 // GET SINGLE SQUARE
 app.get('/squares/:id', async (req, res) => {
     try {
-        // const singleSquare = await Square.findByPk(req.params.id)
         res.json(await Square.findByPk(req.params.id))
     } catch (err) {
         res.status(400).json(err)
     }
-    // console.log(singleSquare)
-    // console.log(singleSquare.keyName)
 })
 
 
@@ -194,22 +196,49 @@ app.delete('/squares/:id', async (req, res) => {
     // find in mySQL
     const singleSquare = await Square.findByPk(req.params.id)
 
-    // Delete from mySQL
-    Square.destroy({
-        where: {
-            id: req.params.id
-        }
-    })
+    // function to parse hashtags from Square description
+    function parseHashtags(str) {
+        let splitDescription = str.split(' ')
+        return splitDescription.filter((word) => word[0] === '#')
+    }
 
-    // Delete from S3
+    // S3 DeleteObjectCommand
     const command = new DeleteObjectCommand({
         Bucket: process.env.AWS_BUCKET,
         Key: singleSquare.keyName
     })
 
     try {
-        console.log('Deleted')
-        res.json(await client.send(command))
+        // Delete image from S3
+        await client.send(command)
+
+        let parsedTags = await parseHashtags(singleSquare.squares_description)
+
+        if (parsedTags.length > 0) {
+            // loop through parsed hashtags
+            for (let i = 0; i < parsedTags.length; i++) {
+                let tagName = await Hashtag.findOne({ where: { hashtag: parsedTags[i] } })
+                // get number of associated squares to the hashtagId
+                let hashtagCount = await tagName.countSquares({ HashtagId: tagName.id })
+                //------Delete from Junction table and Hashtag table------
+                if (hashtagCount > 1) {
+                    // delete just the junction row
+                    await singleSquare.removeHashtag(tagName)
+                } else if (hashtagCount === 1) {
+                    await singleSquare.removeHashtag(tagName)
+                    await Hashtag.destroy({ where: { hashtag: parsedTags[i] } })
+                    console.log("destroyed")
+                }
+            }
+        }
+
+        // Delete from mySQL
+        let deletedSquare = await Square.destroy({
+            where: {
+                id: req.params.id
+            }
+        })
+        res.json('deleted')
     } catch (err) {
         res.status(400).json(err)
     }
@@ -217,21 +246,35 @@ app.delete('/squares/:id', async (req, res) => {
 
 // UPDATE SQUARE
 app.put('/squares/:id', async (req, res) => {
-    // find in mySQL
-    const squareToUpdate = await Square.findByPk(req.params.id)
-    // get description from request body
-    const bodyToInsert = req.body.squares_description
+    function parseHashtags(str) {
+        let splitDescription = str.toLowerCase().split(' ')
+        return splitDescription.filter((word) => word[0] === '#')
+    }
 
-    // update AND save to mySQL
     try {
+        // find Square in mySQL
+        const squareToUpdate = await Square.findByPk(req.params.id)
+        let newHashtags = await parseHashtags(req.body.Description)
+   
+        // create hashtags, get hashtag ids
+        let tagIds = []
+        for (let i = 0; i < newHashtags.length; i++) {
+            let [tag, created] = await Hashtag.findOrCreate({
+                where: { hashtag: newHashtags[i] }
+            })
+            tagIds.push(tag.id)
+        }
+
+        // delete old junction rows + create new ones
+        // setHashtags takes an integer of pKeys
+        await squareToUpdate.setHashtags(tagIds)
+
+        // save Square to MySQL
         const updatedResponse = await squareToUpdate.update({
-            squares_description: bodyToInsert
+            squares_description: req.body.Description
         })
-
         updatedResponse.save()
-
         res.json(updatedResponse.toJSON())
-
     } catch (err) {
         res.status(400).json(err)
     }
