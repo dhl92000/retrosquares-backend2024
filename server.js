@@ -81,7 +81,6 @@ app.get('/users', async (req, res) => {
     } catch (err) {
         res.status(400).json(err)
     }
-
 })
 
 // LIST OBJECTS IN A BUCKET EXAMPLE
@@ -113,14 +112,14 @@ app.get('/squares', async (req, res) => {
 })
 
 // GET HASHTAGS
-// with search param
-app.get('/hashtags', async (req, res) => {
-    try {
-        // find matching Hashtag and get HashtagId
-        // get all the Squares associated to HashtagId
-        // hashtag.getSquares({hashtag: hashtagId}) 
-        console.log('getting hashtags')
+app.get('/hashtags/:searchTerm', async (req, res) => {
+    let searchTerm = '#' + req.params.searchTerm
 
+    try {
+        let hashtagArr = await Hashtag.findOne({ where: { hashtag: searchTerm } })
+        // an array of all squares with matching hashtag ID
+        let squares = await hashtagArr.getSquares()
+        res.json(squares)
         //res.json(await Hashtag.findAll())
     } catch (err) {
         res.status(400).json(err)
@@ -255,7 +254,7 @@ app.put('/squares/:id', async (req, res) => {
         // find Square in mySQL
         const squareToUpdate = await Square.findByPk(req.params.id)
         let newHashtags = await parseHashtags(req.body.Description)
-   
+
         // create hashtags, get hashtag ids
         let tagIds = []
         for (let i = 0; i < newHashtags.length; i++) {
