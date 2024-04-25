@@ -17,7 +17,7 @@ Squares and Hashtag model, and junction table displaying Many-to-Many relationsh
 
 I created this project because I wanted to learn about deploying applications on Amazon Web Services(AWS), and querying Many-to-Many relationships from a database like MySQL. 
 
-The Express server is configured to a remote instance of AWS EC2. It is in this remote server where images are stored and a MySQL database is connected. When 'Squares' (aka. polaroid images with description) are created, the image is stored in AWS S3 with a KeyName as its identifier. The same KeyName is used when creating an input object to store as a 'Square' in the MySQL database. If the Square has a description containing any hashtags, these are parsed and stored in the 'Hashtag' table. 
+The Express server is configured to a remote instance of AWS EC2. It is in this remote server where images are stored and a MySQL database is connected. When 'Squares' (aka. polaroid images with description) are created, the image is stored in AWS S3 with a key name as its identifier. The same key name is used when creating an input object to store as a 'Square' in the MySQL database. If the Square has a description containing any hashtags, these are parsed and stored in the 'Hashtag' table. 
 
 The React frontend makes API calls to the server, and fetches data to display on the browser. If users click on hashtag links or search for particular hashtags, this presents a page that displays just the Squares containing those hashtags.
 
